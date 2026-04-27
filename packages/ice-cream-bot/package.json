@@ -1,0 +1,19 @@
+{
+  "name": "ice-cream-bot",
+  "version": "1.0.0",
+  "description": "Find the best local ice cream shops in any city using Browserbase",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@bb-tools/shared": "workspace:*",
+    "@browserbasehq/sdk": "^2.9.0",
+    "chalk": "^5.6.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.0.0"
+  }
+}

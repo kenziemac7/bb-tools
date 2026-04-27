@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "paths": {
+      "@bb-tools/shared": ["../shared/src/index.ts"]
+    }
+  },
+  "include": ["src"]
+}

@@ -1,0 +1,19 @@
+{
+  "name": "craigslist-hunter",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@bb-tools/shared": "workspace:*",
+    "@browserbasehq/sdk": "^2.9.0",
+    "playwright-core": "^1.58.2",
+    "resend": "^6.9.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.0.0"
+  }
+}
