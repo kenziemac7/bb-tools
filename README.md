@@ -1,6 +1,6 @@
 # bb-tools
 
-A pnpm monorepo of Browserbase CLI tools. Each tool shares a common TypeScript setup and env loading via `packages/shared`.
+A pnpm monorepo of tools I've made with browserbase. Each tool shares a common TypeScript setup and env loading via `packages/shared`.
 
 ## Setup
 
