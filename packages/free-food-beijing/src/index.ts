@@ -1,16 +1,22 @@
 import "@bb-tools/shared";
+import { requireEnv } from "@bb-tools/shared";
+import Browserbase from "@browserbasehq/sdk";
 import { Stagehand } from "@browserbasehq/stagehand";
 import { z } from "zod/v3";
 
 // ── Configuration ───────────────────────────────────────────────
 
-const TODAY = new Date().toISOString().slice(0, 10);           // e.g. "2026-05-02"
-const YEAR  = new Date().getFullYear();                         // e.g. 2026
-const MIN_LIKELIHOOD = 30;                                      // minimum score to keep
-const MAX_DETAIL_PAGES = 6;                                     // max detail pages to visit per source
-const EVENTBRITE_LIMIT = 8;                                     // max Eventbrite detail pages
+const TODAY = new Date().toISOString().slice(0, 10);
+const YEAR  = new Date().getFullYear();
+const MIN_LIKELIHOOD = 30;
+const MAX_DETAIL_PAGES = 6;
+const EVENTBRITE_LIMIT = 8;
 
-// ── Stagehand (OpenRouter) ──────────────────────────────────────
+// ── Browserbase SDK (for web search) ────────────────────────────
+
+const bb = new Browserbase({ apiKey: requireEnv("BROWSERBASE_API_KEY") });
+
+// ── Stagehand (OpenRouter, for page extraction) ─────────────────
 
 const stagehand = new Stagehand({
   env: "BROWSERBASE",
@@ -61,41 +67,36 @@ const detailSchema = z.object({
   foodAndDrinks: z.string(),
 });
 
-// ── Prompts (strict grading) ────────────────────────────────────
+// ── Prompts ─────────────────────────────────────────────────────
 
-const LISTING_PROMPT = `You are a strict free-food analyst for Beijing. Today is ${TODAY}.
+const LISTING_PROMPT = `You are a free-food analyst for Beijing. Today is ${TODAY}.
 
 TASK: Extract event cards from this page. ONLY include events dated ${YEAR} or later.
-Skip any event from ${YEAR - 1} or earlier — those are stale.
+Skip any event from ${YEAR - 1} or earlier.
 
 For each event, score the likelihood (0-100) that a regular attendee receives FREE food or drinks AT NO EXTRA COST beyond the ticket/registration:
 
-SCORING RULES (be harsh — most events do NOT have free food):
+SCORING RULES:
   95-100 → Page explicitly says "free food", "免费餐饮", "complimentary drinks", "free pizza/beer/snacks"
   80-94  → Event explicitly mentions "refreshments provided", "茶歇", "提供茶点", "catering included"
   65-79  → Tech demo day, product launch, hackathon, or investor event (these almost always cater)
   50-64  → Networking mixer, happy hour, or reception where drinks/appetizers are standard
   35-49  → Professional workshop, panel, or community meetup (sometimes light refreshments)
   15-34  → General event where food is theoretically possible but not mentioned
-  0-14   → ZERO evidence of free food. This includes:
-           • Food festivals / markets / tastings where you PAY for food
-           • Restaurant promos, cooking classes, food tours
-           • Concerts, yoga, lectures, film screenings
-           • Any "dinner meetup" where attendees pay for their own meal
-           • Online/virtual events
+  0-14   → No evidence of free food: paid food festivals, restaurant promos, concerts, online events
 
-IMPORTANT: If the page is in Chinese, translate the event name to English in the "nameEnglish" field.
-If the event name is already in English, copy it to "nameEnglish" as-is.
+IMPORTANT: If the page is in Chinese, translate the event name to English in "nameEnglish".
+If already English, copy it to "nameEnglish" as-is.
 
-Return: name (original language), nameEnglish (English translation), time, likelihood (int), reasoning (1 sentence — must explain what SPECIFIC evidence of free food exists or why there is none), foodAndDrinks (specific items mentioned, or empty string).`;
+Return: name (original language), nameEnglish, time, likelihood (int), reasoning (1 sentence with SPECIFIC evidence), foodAndDrinks (specific items or empty string).`;
 
-const DETAIL_PROMPT = `You are a strict free-food analyst for Beijing. Today is ${TODAY}.
+const DETAIL_PROMPT = `You are a free-food analyst for Beijing. Today is ${TODAY}.
 
 Analyze this single event page. ONLY process if the event is dated ${YEAR} or later.
 
 Score the likelihood (0-100) that a regular attendee receives FREE food or drinks AT NO EXTRA COST:
 
-SCORING RULES (be conservative):
+SCORING RULES:
   95-100 → Explicitly says "free food/drinks", "免费餐饮", "complimentary refreshments"
   80-94  → Mentions "refreshments provided", "茶歇", "提供茶点", "catering included"
   65-79  → Tech demo/launch/hackathon (usually catered even if not stated)
@@ -110,9 +111,9 @@ DISQUALIFIERS (auto-score 0-5):
   • Online/virtual event
   • Past event (before ${TODAY})
 
-IMPORTANT: Translate Chinese event names to English in "nameEnglish".
+Translate Chinese event names to English in "nameEnglish".
 
-Return: name (original), nameEnglish (English), timeAndLocation (date+time+venue), likelihood, reasoning (must cite specific evidence), foodAndDrinks (specific items or empty).`;
+Return: name (original), nameEnglish, timeAndLocation, likelihood, reasoning (cite specific evidence), foodAndDrinks (specific items or empty).`;
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -144,7 +145,97 @@ function log(source: string, msg: string) {
   console.log(`  [${source}] ${msg}`);
 }
 
-// ── Source scrapers ─────────────────────────────────────────────
+// ── Phase 1: Targeted Web Search ────────────────────────────────
+// Use Browserbase web search to find events that specifically mention
+// free food, tea breaks, refreshments, etc.
+
+async function searchWebForFreeFood(): Promise<void> {
+  const SOURCE = "Web Search";
+  
+  // Targeted queries in both English and Chinese
+  const queries = [
+    // English queries
+    `Beijing tech meetup free food drinks ${YEAR}`,
+    `Beijing startup event free food refreshments May ${YEAR}`,
+    `Beijing hackathon free food ${YEAR}`,
+    `Beijing networking event complimentary drinks ${YEAR}`,
+    // Chinese queries — these target specific free-food keywords
+    `北京 活动 茶歇 免费 ${YEAR}`,          // Beijing events with tea break, free
+    `北京 科技 沙龙 提供茶点 ${YEAR}`,      // Beijing tech salon with refreshments
+    `北京 黑客松 免费餐饮 ${YEAR}`,          // Beijing hackathon free catering
+    `北京 创业 活动 免费 下午茶 ${YEAR}`,    // Beijing startup event free afternoon tea
+    `北京 线下 meetup 免费零食 ${YEAR}`,     // Beijing offline meetup free snacks
+    `北京 产品发布会 酒会 ${YEAR}`,          // Beijing product launch reception
+  ];
+
+  const seenUrls = new Set<string>();
+  const allResults: Array<{ title: string; url: string }> = [];
+
+  for (const query of queries) {
+    log(SOURCE, `Searching: "${query}"`);
+    try {
+      const { results: qResults } = await bb.search.web({ query, numResults: 10 });
+      if (qResults) {
+        for (const r of qResults) {
+          if (!seenUrls.has(r.url)) {
+            seenUrls.add(r.url);
+            allResults.push(r);
+          }
+        }
+      }
+    } catch (e) {
+      log(SOURCE, `  ⚠ Search failed: ${e}`);
+    }
+  }
+
+  log(SOURCE, `Found ${allResults.length} unique URLs across ${queries.length} searches`);
+
+  // Filter for event-like URLs (skip media articles, general pages)
+  const EVENT_DOMAINS = [
+    "lu.ma", "luma.com", "eventbrite.com", "meetup.com",
+    "huodongxing.com", "hdx.com", "douban.com",
+    "bagevent.com", "活动行", "hdb.com",
+    "aktivity.cn", "zaojiu.com", "juejin.cn",
+    "segmentfault.com",
+  ];
+  const SKIP_DOMAINS = [
+    "youtube.com", "twitter.com", "x.com", "reddit.com",
+    "wikipedia.org", "zhihu.com", "weibo.com", "baidu.com",
+    "google.com", "bing.com",
+  ];
+
+  const candidateUrls = allResults.filter((r) => {
+    const host = new URL(r.url).hostname.replace(/^www\./, "");
+    if (SKIP_DOMAINS.some((d) => host.includes(d))) return false;
+    return true;
+  });
+
+  log(SOURCE, `${candidateUrls.length} candidate URLs after filtering`);
+
+  // Visit the top candidates with Stagehand
+  let visited = 0;
+  for (const result of candidateUrls.slice(0, 10)) {
+    if (visited >= 8) break;
+    
+    log(SOURCE, `  Visiting: ${result.title.slice(0, 60)}...`);
+    try {
+      if (!(await safeGoto(result.url))) continue;
+      visited++;
+
+      const detail = await stagehand.extract(DETAIL_PROMPT, detailSchema);
+      if (detail.likelihood >= MIN_LIKELIHOOD) {
+        results.push({ ...detail, url: result.url, source: SOURCE });
+        log(SOURCE, `  ✓ (${detail.likelihood}%): ${detail.nameEnglish || detail.name}`);
+      } else {
+        log(SOURCE, `  ✗ Rejected (${detail.likelihood}%): ${detail.nameEnglish || detail.name}`);
+      }
+    } catch {
+      log(SOURCE, `  ⚠ Error processing: ${result.url}`);
+    }
+  }
+}
+
+// ── Phase 2: Platform scrapers ──────────────────────────────────
 
 async function scrapeLuma(): Promise<void> {
   const SOURCE = "Luma";
@@ -163,7 +254,6 @@ async function scrapeLuma(): Promise<void> {
       continue;
     }
 
-    // Try to get detail page for higher-confidence events
     if (event.likelihood >= 50 && detailCount < MAX_DETAIL_PAGES) {
       try {
         await stagehand.act(`click the "${event.name}" event`);
@@ -199,7 +289,6 @@ async function scrapeLuma(): Promise<void> {
 async function scrapeEventbrite(): Promise<void> {
   const SOURCE = "Eventbrite";
 
-  // Search multiple relevant categories for Beijing
   const ebUrls: string[] = [];
   const categories = [
     "https://www.eventbrite.com/d/china--beijing/food-and-drink--events/",
@@ -222,7 +311,6 @@ async function scrapeEventbrite(): Promise<void> {
     ebUrls.push(...urls);
   }
 
-  // Deduplicate URLs
   const uniqueUrls = [...new Set(ebUrls)];
   log(SOURCE, `Total unique event URLs: ${uniqueUrls.length}`);
 
@@ -270,7 +358,6 @@ async function scrapeMeetup(): Promise<void> {
 
 async function scrapeHuodongxing(): Promise<void> {
   const SOURCE = "活动行";
-  // Tech/internet category in Beijing
   const HDX_URL = "https://www.huodongxing.com/eventlist?citycode=bj&orderby=n&tag=%E7%A7%91%E6%8A%80%E4%BA%92%E8%81%94%E7%BD%91";
   log(SOURCE, `Loading ${HDX_URL}`);
   if (!(await safeGoto(HDX_URL))) return;
@@ -329,21 +416,24 @@ console.log(`  Scanning English & Chinese web for free food events...`);
 console.log(`${"═".repeat(60)}\n`);
 
 try {
-  // ── English-language sources ──
-  console.log("── English-language sources ──────────────────────────");
+  // ── Phase 1: Targeted web search (highest value) ──
+  console.log("── Phase 1: Targeted web search (EN + CN) ──────────────");
+  await searchWebForFreeFood();
+
+  // ── Phase 2: English-language platforms ──
+  console.log("\n── Phase 2: English-language platforms ──────────────────");
   await scrapeLuma();
   await scrapeEventbrite();
   await scrapeMeetup();
 
-  // ── Chinese-language sources ──
-  console.log("\n── Chinese-language sources ─────────────────────────");
+  // ── Phase 3: Chinese-language platforms ──
+  console.log("\n── Phase 3: Chinese-language platforms ─────────────────");
   await scrapeHuodongxing();
   await scrapeDouban();
 
 } catch (e) {
   console.error("\n⚠ Scraping stopped early:", e instanceof Error ? e.message : String(e));
 } finally {
-  // Deduplicate and sort
   const final = dedup(results).sort((a, b) => b.likelihood - a.likelihood);
 
   console.log(`\n${"═".repeat(60)}`);
@@ -375,7 +465,6 @@ try {
       console.log();
     });
 
-    // Legend
     console.log("─".repeat(60));
     console.log("  🟢 90%+ Confirmed free food   🔵 70-89% Very likely");
     console.log("  🟡 50-69% Probable             🟠 30-49% Possible");

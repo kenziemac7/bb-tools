@@ -63,6 +63,9 @@ importers:
       '@bb-tools/shared':
         specifier: workspace:*
         version: link:../shared
+      '@browserbasehq/sdk':
+        specifier: ^2.9.0
+        version: 2.10.0
       '@browserbasehq/stagehand':
         specifier: latest
         version: 3.3.0(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.9.0)(deepmerge@4.3.1)(zod@4.3.6)

@@ -7,6 +7,7 @@
   },
   "dependencies": {
     "@bb-tools/shared": "workspace:*",
+    "@browserbasehq/sdk": "^2.9.0",
     "@browserbasehq/stagehand": "latest",
     "zod": "^4.0.0"
   },
