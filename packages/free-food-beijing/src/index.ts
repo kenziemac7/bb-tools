@@ -71,8 +71,8 @@ const detailSchema = z.object({
 
 const LISTING_PROMPT = `You are a free-food analyst for Beijing. Today is ${TODAY}.
 
-TASK: Extract event cards from this page. ONLY include events dated ${YEAR} or later.
-Skip any event from ${YEAR - 1} or earlier.
+TASK: Extract event cards from this page. ONLY include events happening TODAY (${TODAY}) or in the FUTURE.
+CRITICAL DATE CHECK: You MUST verify the date. If the event is in the past (e.g., April 2026, or any year before 2026), skip it immediately. If the date is in Chinese (like "2026年4月11日" or "4月"), convert it to YYYY-MM-DD and verify it is >= ${TODAY}. If it is in the past, DO NOT include it.
 
 For each event, score the likelihood (0-100) that a regular attendee receives FREE food or drinks AT NO EXTRA COST beyond the ticket/registration:
 
@@ -92,7 +92,7 @@ Return: name (original language), nameEnglish, time, likelihood (int), reasoning
 
 const DETAIL_PROMPT = `You are a free-food analyst for Beijing. Today is ${TODAY}.
 
-Analyze this single event page. ONLY process if the event is dated ${YEAR} or later.
+Analyze this single event page. ONLY process if the event happens TODAY (${TODAY}) or in the FUTURE.
 
 Score the likelihood (0-100) that a regular attendee receives FREE food or drinks AT NO EXTRA COST:
 
@@ -105,11 +105,11 @@ SCORING RULES:
   15-34  → No evidence of food but theoretically possible
   0-14   → No free food. Paid food events, restaurants, online events, etc.
 
-DISQUALIFIERS (auto-score 0-5):
+DISQUALIFIERS (auto-score 0):
+  • Past event (happened before ${TODAY}). CRITICAL: Carefully read Chinese dates (e.g., "4月" means April, which is BEFORE May). If the event was before ${TODAY}, YOU MUST SCORE 0.
   • "费用自理" / "AA制" / "pay for your own" → attendees pay for food
   • Food festival / market / tasting with paid vendors
   • Online/virtual event
-  • Past event (before ${TODAY})
 
 Translate Chinese event names to English in "nameEnglish".
 
