@@ -1,0 +1,21 @@
+{
+  "name": "moms-playlist",
+  "version": "1.0.0",
+  "description": "Build a personalised Spotify playlist for mom using Billboard charts + Claude",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.37.0",
+    "@bb-tools/shared": "workspace:*",
+    "@browserbasehq/sdk": "^2.9.0",
+    "chalk": "^5.6.2",
+    "playwright-core": "^1.58.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.0.0"
+  }
+}
