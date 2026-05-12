@@ -2,16 +2,30 @@ import { config } from "dotenv";
 import { existsSync } from "fs";
 import { resolve } from "path";
 
-// Walk up from cwd to find the nearest .env file (supports monorepo root or per-package)
+function unique<T>(values: T[]): T[] {
+  return [...new Set(values)];
+}
+
+// Walk up from cwd to find the nearest .env file, then fall back to OpenClaw's state dir.
 function findEnvFile(): string | undefined {
   let dir = process.cwd();
+  const candidates: string[] = [];
   for (let i = 0; i < 5; i++) {
-    const candidate = resolve(dir, ".env");
-    if (existsSync(candidate)) return candidate;
+    candidates.push(resolve(dir, ".env"));
     const parent = resolve(dir, "..");
     if (parent === dir) break;
     dir = parent;
   }
+
+  const openClawStateDir =
+    process.env["OPENCLAW_STATE_DIR"] || resolve(process.env["HOME"] || "~", ".openclaw");
+
+  candidates.push(resolve(openClawStateDir, ".env"));
+
+  for (const candidate of unique(candidates)) {
+    if (existsSync(candidate)) return candidate;
+  }
+
   return undefined;
 }
 

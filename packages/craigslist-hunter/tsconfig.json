@@ -1,11 +1,12 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "src",
+    "lib": ["ES2022", "DOM"],
+    "rootDir": "..",
     "outDir": "dist",
     "paths": {
       "@bb-tools/shared": ["../shared/src/index.ts"]
     }
   },
-  "include": ["src"]
+  "include": ["src", "../shared/src"]
 }

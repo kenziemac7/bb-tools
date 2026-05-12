@@ -10,9 +10,6 @@ importers:
 
   packages/competitor-monitoring:
     dependencies:
-      '@anthropic-ai/sdk':
-        specifier: ^0.39.0
-        version: 0.39.0
       '@bb-tools/shared':
         specifier: workspace:*
         version: link:../shared

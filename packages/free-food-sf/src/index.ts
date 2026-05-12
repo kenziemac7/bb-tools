@@ -1,10 +1,13 @@
 import "@bb-tools/shared";
+import { requireEnv } from "@bb-tools/shared";
 import { Stagehand } from "@browserbasehq/stagehand";
 import { z } from "zod/v3";
 
+requireEnv("XAI_API_KEY");
+
 const stagehand = new Stagehand({
   env: "BROWSERBASE",
-  model: "anthropic/claude-sonnet-4-6",
+  model: "xai/grok-4-fast-reasoning",
 });
 
 await stagehand.init();

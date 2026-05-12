@@ -1,13 +1,14 @@
 {
-  "name": "bb-tools",
+  "name": "openclaw-browserbase-tools",
+  "description": "Browserbase-powered automation tools packaged as OpenClaw workspace skills.",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.33.0",
   "scripts": {
+    "check": "pnpm -r exec tsc --noEmit && ./scripts/check-wrappers.sh",
     "free-food-sf": "pnpm --filter free-food-sf start",
     "competitor-monitoring": "pnpm --filter competitor-monitoring start",
     "craigslist-hunter": "pnpm --filter craigslist-hunter start",
-    "ice-cream-bot": "pnpm --filter ice-cream-bot start --",
-    "moms-playlist": "pnpm --filter moms-playlist start --"
+    "ice-cream-bot": "pnpm --filter ice-cream-bot start --"
   }
 }

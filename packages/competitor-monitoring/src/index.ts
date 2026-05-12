@@ -5,10 +5,11 @@ import path from "path";
 import { URL } from "url";
 import Browserbase from "@browserbasehq/sdk";
 import { chromium } from "playwright";
-import Anthropic from "@anthropic-ai/sdk";
 
 const SCREENSHOTS_DIR = "./screenshots";
 const COMPARISON_FILE = "./comparison.md";
+const XAI_CHAT_COMPLETIONS_URL = "https://api.x.ai/v1/chat/completions";
+const XAI_MODEL = process.env["BB_TOOLS_XAI_MODEL"] || "grok-4.20";
 
 interface Target {
   name: string;
@@ -30,6 +31,41 @@ interface AnalysisResult {
   competitors: CompetitorData[];
 }
 
+const ANALYSIS_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["competitors"],
+  properties: {
+    competitors: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["name", "plans"],
+        properties: {
+          name: { type: "string" },
+          plans: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["name", "price", "features"],
+              properties: {
+                name: { type: "string" },
+                price: { type: "string" },
+                features: {
+                  type: "array",
+                  items: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+} as const;
+
 const DEFAULT_COMPETITORS: Target[] = [
   { name: "Asana", url: "https://asana.com/pricing" },
   { name: "Linear", url: "https://linear.app/pricing" },
@@ -45,6 +81,59 @@ function resolveTargets(): Target[] {
   const args = process.argv.slice(2).filter((a) => a.startsWith("http"));
   if (args.length === 0) return DEFAULT_COMPETITORS;
   return args.map((u) => ({ name: nameFromUrl(u), url: u }));
+}
+
+async function analyzeScreenshotsWithXai(
+  screenshots: Array<{ name: string; base64: string }>,
+): Promise<string> {
+  const prompt =
+    `The screenshots below are (in order): ${screenshots.map((s) => s.name).join(", ")}.\n\n` +
+    "You are a pricing analyst. Extract the plan names, prices, and key features for each competitor.";
+
+  const content = [
+    { type: "text", text: prompt },
+    ...screenshots.map((s) => ({
+      type: "image_url",
+      image_url: {
+        url: `data:image/png;base64,${s.base64}`,
+        detail: "high",
+      },
+    })),
+  ];
+
+  const response = await fetch(XAI_CHAT_COMPLETIONS_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${requireEnv("XAI_API_KEY")}`,
+    },
+    body: JSON.stringify({
+      model: XAI_MODEL,
+      messages: [{ role: "user", content }],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "pricing_analysis",
+          strict: true,
+          schema: ANALYSIS_SCHEMA,
+        },
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const details = await response.text();
+    throw new Error(`xAI request failed (${response.status}): ${details}`);
+  }
+
+  const payload = (await response.json()) as {
+    choices?: Array<{ message?: { content?: string | null } }>;
+  };
+  const text = payload.choices?.[0]?.message?.content?.trim();
+  if (!text) {
+    throw new Error("xAI returned an empty response.");
+  }
+  return text;
 }
 
 async function main(): Promise<void> {
@@ -109,57 +198,18 @@ async function main(): Promise<void> {
   await browser.close();
   console.log("Browser session closed.\n");
 
-  const anthropic = new Anthropic({ apiKey: requireEnv("ANTHROPIC_API_KEY") });
-
-  const imageBlocks = screenshots.map((s) => ({
-    type: "image" as const,
-    source: { type: "base64" as const, media_type: "image/png" as const, data: s.base64 },
-  }));
-
-  const labelBlock = {
-    type: "text" as const,
-    text:
-      `The screenshots below are (in order): ${screenshots.map((s) => s.name).join(", ")}.\n\n` +
-      "You are a pricing analyst. Here are screenshots of competitor pricing pages. " +
-      "Extract the plan names, prices, and key features for each competitor. " +
-      "Return ONLY valid JSON matching this exact structure — no markdown fences, no extra text:\n" +
-      "{\n" +
-      '  "competitors": [\n' +
-      "    {\n" +
-      '      "name": "CompanyName",\n' +
-      '      "plans": [\n' +
-      '        { "name": "Plan Name", "price": "$X/mo", "features": ["feature1", "feature2"] }\n' +
-      "      ]\n" +
-      "    }\n" +
-      "  ]\n" +
-      "}",
-  };
-
-  console.log(`Sending ${screenshots.length} screenshot(s) to Claude for analysis...`);
-
-  const response = await anthropic.messages.create({
-    model: "claude-opus-4-5",
-    max_tokens: 4096,
-    messages: [{ role: "user", content: [labelBlock, ...imageBlocks] }],
-  });
-
-  const rawText = response.content
-    .filter((b) => b.type === "text")
-    .map((b) => (b as { type: "text"; text: string }).text)
-    .join("\n")
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/, "")
-    .trim();
+  console.log(`Sending ${screenshots.length} screenshot(s) to xAI for analysis...`);
+  const rawText = await analyzeScreenshotsWithXai(screenshots);
 
   let data: AnalysisResult | null = null;
   try {
     data = JSON.parse(rawText) as AnalysisResult;
   } catch {
-    console.error("Could not parse Claude response as JSON — printing raw output:\n");
+    console.error("Could not parse xAI response as JSON — printing raw output:\n");
     console.log(rawText);
   }
 
-  console.log("Claude analysis complete.\n");
+  console.log("xAI analysis complete.\n");
   console.log("=== Pricing Comparison ===");
 
   const mdLines = [

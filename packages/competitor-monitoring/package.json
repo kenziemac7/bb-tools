@@ -6,7 +6,6 @@
     "start": "tsx src/index.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
     "@bb-tools/shared": "workspace:*",
     "@browserbasehq/sdk": "^2.9.0",
     "playwright": "^1.52.0"

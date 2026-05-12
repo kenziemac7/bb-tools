@@ -24,7 +24,7 @@ function extractJsonLdItems(html: string): Record<string, unknown>[] {
   let m: RegExpExecArray | null;
   while ((m = re.exec(html)) !== null) {
     try {
-      const parsed: unknown = JSON.parse(m[1]);
+      const parsed: unknown = JSON.parse(m[1]!);
       const entries = Array.isArray(parsed) ? parsed : [parsed];
       items.push(...(entries as Record<string, unknown>[]));
     } catch {
