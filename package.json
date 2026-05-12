@@ -5,6 +5,7 @@
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "free-food-sf": "pnpm --filter free-food-sf start",
+    "free-food-beijing": "pnpm --filter free-food-beijing start",
     "competitor-monitoring": "pnpm --filter competitor-monitoring start",
     "craigslist-hunter": "pnpm --filter craigslist-hunter start",
     "ice-cream-bot": "pnpm --filter ice-cream-bot start --",

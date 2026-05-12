@@ -58,6 +58,31 @@ importers:
         specifier: ^5.0.0
         version: 5.9.3
 
+  packages/free-food-beijing:
+    dependencies:
+      '@bb-tools/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@browserbasehq/sdk':
+        specifier: ^2.9.0
+        version: 2.10.0
+      '@browserbasehq/stagehand':
+        specifier: latest
+        version: 3.3.0(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.9.0)(deepmerge@4.3.1)(zod@4.3.6)
+      zod:
+        specifier: ^4.0.0
+        version: 4.3.6
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.17
+      tsx:
+        specifier: ^4.19.2
+        version: 4.21.0
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+
   packages/free-food-sf:
     dependencies:
       '@bb-tools/shared':
